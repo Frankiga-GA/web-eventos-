@@ -1,6 +1,5 @@
 const menuButton = document.querySelector('.menu-toggle');
 const nav = document.querySelector('.nav');
-const reelTrack = document.querySelector('.reel-track');
 const orbitWord = document.querySelector('.orbit-word');
 const orbitCount = document.querySelector('.orbit-count');
 
@@ -18,13 +17,30 @@ if (orbitWord && orbitCount) {
   }, 2200);
 }
 
-// Duplicate the reel once so its horizontal motion loops without a blank gap.
-if (reelTrack) {
-  const repeatedCards = [...reelTrack.children].map((card) => card.cloneNode(true));
-  repeatedCards.forEach((card) => {
-    card.setAttribute('aria-hidden', 'true');
-    reelTrack.append(card);
+// Duplicate each reel lane for a seamless loop in both directions.
+document.querySelectorAll('.reel-track').forEach((track) => {
+  [...track.children].forEach((card) => {
+    const clone = card.cloneNode(true);
+    clone.setAttribute('aria-hidden', 'true');
+    clone.querySelector('.reel-audio')?.remove();
+    track.append(clone);
   });
+});
+
+const kineticWord = document.querySelector('.kinetic-word');
+if (kineticWord && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const words = ['el momento', 'la emoción', 'el espectáculo', 'el recuerdo'];
+  let wordIndex = 0;
+  window.setInterval(() => {
+    kineticWord.classList.add('is-exiting');
+    window.setTimeout(() => {
+      wordIndex = (wordIndex + 1) % words.length;
+      kineticWord.textContent = words[wordIndex];
+      kineticWord.classList.remove('is-exiting');
+      kineticWord.classList.add('is-entering');
+      window.setTimeout(() => kineticWord.classList.remove('is-entering'), 440);
+    }, 320);
+  }, 2500);
 }
 
 const galleryData = {
@@ -83,7 +99,7 @@ if (menuButton && nav) {
   });
 }
 
-const revealTargets = document.querySelectorAll('.intro, .stats-head, .stat, .stats-note, .intro-grid h2, .intro-copy, .intro-visual, .section-heading, .service-row, .process-head, .process-steps article, .tile, .feature-copy, .about-image, .about-copy, .faq-heading, .faq-list details, .form-intro, .quote-form, .contact-row, .contact-visual, .contact-foot > div');
+const revealTargets = document.querySelectorAll('.intro, .stats-head, .stat, .stats-note, .intro-grid h2, .intro-copy, .intro-visual, .section-heading, .service-row, .process-head, .process-steps article, .tile, .about-image, .about-copy, .faq-heading, .faq-list details, .form-intro, .quote-form, .contact-row, .contact-visual, .contact-foot > div');
 const observer = new IntersectionObserver((entries) => {
   entries.forEach((entry) => {
     if (entry.isIntersecting) {
@@ -101,23 +117,81 @@ revealTargets.forEach((target, index) => {
 
 // Pause sample footage while it is off screen so the motion stays smooth on phones.
 const videoObserver = new IntersectionObserver((entries) => {
-  entries.forEach(({ target, isIntersecting }) => {
-    if (isIntersecting) target.play().catch(() => {});
+  entries.forEach(({ target, isIntersecting, intersectionRatio }) => {
+    // Reels are loaded and played only when they are meaningfully visible.
+    const shouldPlay = isIntersecting && (target.closest('.reel-card') ? intersectionRatio >= 0.35 : true);
+    if (shouldPlay) target.play().catch(() => {});
     else target.pause();
   });
-}, { threshold: 0.05 });
+}, { threshold: [0, 0.35], rootMargin: '80px 0px' });
 
 document.querySelectorAll('video').forEach((video) => {
   if (!video.closest('.service-row')) videoObserver.observe(video);
 });
 
-document.querySelectorAll('.service-row').forEach((row) => {
-  const video = row.querySelector('video');
-  if (video && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-    row.addEventListener('mouseenter', () => video.play().catch(() => {}));
-    row.addEventListener('mouseleave', () => video.pause());
-  }
+document.querySelectorAll('.reel-audio').forEach((button) => {
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const video = button.closest('.reel-card')?.querySelector('video');
+    if (!video) return;
+    video.muted = !video.muted;
+    button.classList.toggle('is-on', !video.muted);
+    button.setAttribute('aria-label', video.muted ? 'Activar sonido' : 'Silenciar video');
+    button.textContent = video.muted ? '♪' : '♫';
+  });
 });
+
+const servicePreview = document.querySelector('.service-cursor-preview');
+const previewVideo = servicePreview?.querySelector('video');
+if (servicePreview && previewVideo && window.matchMedia('(hover: hover) and (pointer: fine)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  document.querySelectorAll('.service-row').forEach((row) => {
+    row.addEventListener('mouseenter', () => {
+      previewVideo.src = row.dataset.previewVideo;
+      previewVideo.poster = row.dataset.previewImage;
+      previewVideo.load();
+      previewVideo.play().catch(() => {});
+      servicePreview.classList.add('is-visible');
+    });
+    row.addEventListener('mousemove', (event) => {
+      const left = Math.min(event.clientX, window.innerWidth - 260);
+      const top = Math.min(event.clientY, window.innerHeight - 360);
+      servicePreview.style.setProperty('--preview-x', `${Math.max(12, left)}px`);
+      servicePreview.style.setProperty('--preview-y', `${Math.max(12, top)}px`);
+    });
+    row.addEventListener('mouseleave', () => {
+      servicePreview.classList.remove('is-visible');
+      previewVideo.pause();
+      previewVideo.removeAttribute('src');
+      previewVideo.load();
+    });
+  });
+}
+
+const counters = document.querySelectorAll('[data-count]');
+const counterObserver = new IntersectionObserver((entries, observer) => {
+  entries.forEach((entry) => {
+    if (!entry.isIntersecting) return;
+    const element = entry.target;
+    const target = Number(element.dataset.count);
+    const suffix = element.dataset.suffix || '';
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      element.textContent = `${target}${suffix}`;
+      observer.unobserve(element);
+      return;
+    }
+    const start = performance.now();
+    const duration = 1100;
+    const tick = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      element.textContent = `${Math.round(target * eased)}${suffix}`;
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    observer.unobserve(element);
+  });
+}, { threshold: 0.6 });
+counters.forEach((counter) => counterObserver.observe(counter));
 
 const quoteForm = document.querySelector('#quote-form');
 if (quoteForm) {
@@ -151,6 +225,19 @@ if (quoteForm) {
   eventSelect?.addEventListener('change', renderEventContext);
   renderEventContext();
 
+  document.querySelectorAll('[data-pack-event]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (eventSelect) {
+        eventSelect.value = link.dataset.packEvent;
+        eventSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (comboField) comboField.value = link.dataset.packName;
+      history.replaceState(null, '', '#cotizacion');
+      quoteForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
   if (requestedService) {
     const serviceCheckbox = [...quoteForm.querySelectorAll('input[name="servicios"]')]
       .find((input) => input.value.toLocaleLowerCase() === requestedService.toLocaleLowerCase());
@@ -179,16 +266,55 @@ if (quoteForm) {
 }
 
 let scrollTicking = false;
+let lastScrollY = window.scrollY;
+let lastScrollTime = performance.now();
+let marqueeResetTimer;
+const textMasks = document.querySelectorAll('[data-text-mask]');
+const featureSection = document.querySelector('.feature');
 window.addEventListener('scroll', () => {
   if (scrollTicking) return;
   scrollTicking = true;
   requestAnimationFrame(() => {
+    const now = performance.now();
+    const deltaY = window.scrollY - lastScrollY;
+    const deltaTime = Math.max(1, now - lastScrollTime);
+    const scrollSpeed = Math.abs(deltaY / deltaTime);
+    const marqueeDuration = Math.max(8, 26 - scrollSpeed * 8);
+    document.documentElement.style.setProperty('--marquee-duration', `${marqueeDuration}s`);
+    document.documentElement.style.setProperty('--marquee-direction', deltaY < 0 ? 'reverse' : 'normal');
+    lastScrollY = window.scrollY;
+    lastScrollTime = now;
+    window.clearTimeout(marqueeResetTimer);
+    marqueeResetTimer = window.setTimeout(() => {
+      document.documentElement.style.setProperty('--marquee-duration', '26s');
+      document.documentElement.style.setProperty('--marquee-direction', 'normal');
+    }, 260);
+
+    textMasks.forEach((heading) => {
+      const rect = heading.getBoundingClientRect();
+      const progress = Math.max(0, Math.min(1, (window.innerHeight * .84 - rect.top) / Math.max(1, rect.height * .8)));
+      heading.style.setProperty('--mask-fill', `${progress * 100}%`);
+    });
+
+    if (featureSection) {
+      const rect = featureSection.getBoundingClientRect();
+      const travel = Math.max(1, rect.height - window.innerHeight);
+      const progress = Math.max(0, Math.min(1, -rect.top / travel));
+      featureSection.style.setProperty('--feature-inset', `${38 * (1 - progress)}%`);
+      featureSection.style.setProperty('--feature-radius', `${28 * (1 - progress)}px`);
+      const copyProgress = Math.max(0, Math.min(1, (progress - .28) / .32));
+      featureSection.style.setProperty('--feature-copy-opacity', String(copyProgress));
+      featureSection.style.setProperty('--feature-shade-opacity', String(.18 + copyProgress * .62));
+    }
+
     const scrollable = document.documentElement.scrollHeight - window.innerHeight;
     document.documentElement.style.setProperty('--scroll-progress', scrollable > 0 ? String(window.scrollY / scrollable) : '0');
     document.querySelector('.topbar')?.classList.toggle('scrolled', window.scrollY > 30);
     scrollTicking = false;
   });
 }, { passive: true });
+
+if (featureSection) window.dispatchEvent(new Event('scroll'));
 
 const hero = document.querySelector('.hero');
 if (hero && window.matchMedia('(pointer:fine)').matches) {
@@ -202,6 +328,44 @@ if (hero && window.matchMedia('(pointer:fine)').matches) {
   hero.addEventListener('pointerleave', () => {
     hero.style.setProperty('--pointer-x', '0px');
     hero.style.setProperty('--pointer-y', '0px');
+  });
+}
+
+if (window.matchMedia('(pointer:fine) and (hover:hover)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  document.addEventListener('mousemove', (event) => {
+    document.documentElement.style.setProperty('--cursor-x', `${event.clientX}px`);
+    document.documentElement.style.setProperty('--cursor-y', `${event.clientY}px`);
+  }, { passive: true });
+
+  document.querySelectorAll('.pack-card').forEach((card) => {
+    card.addEventListener('pointermove', (event) => {
+      const rect = card.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      card.style.setProperty('--pack-x', `${x}px`);
+      card.style.setProperty('--pack-y', `${y}px`);
+      const tiltX = ((y / rect.height) - .5) * -5;
+      const tiltY = ((x / rect.width) - .5) * 5;
+      card.style.transform = `perspective(900px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) translateY(-2px)`;
+    });
+    card.addEventListener('pointerleave', () => { card.style.transform = ''; });
+  });
+
+  const magneticButtons = document.querySelectorAll('.nav-cta,.hero-quote,.light-button,.contact-button,.submit-button,.pack-cta,.detail-primary,.floating-whatsapp');
+  magneticButtons.forEach((button) => {
+    button.classList.add('magnetic');
+    button.addEventListener('pointermove', (event) => {
+      const rect = button.getBoundingClientRect();
+      const dx = event.clientX - (rect.left + rect.width / 2);
+      const dy = event.clientY - (rect.top + rect.height / 2);
+      const distance = Math.hypot(dx, dy);
+      const radius = 115;
+      if (distance < radius) {
+        const strength = (1 - distance / radius) * .13;
+        button.style.transform = `translate(${dx * strength}px, ${dy * strength}px)`;
+      } else button.style.transform = '';
+    });
+    button.addEventListener('pointerleave', () => { button.style.transform = ''; });
   });
 }
 
