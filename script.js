@@ -45,19 +45,19 @@ if (kineticWord && !window.matchMedia('(prefers-reduced-motion: reduce)').matche
 
 const galleryData = {
   social: [
-    ['https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1100&q=85', 'Novios celebrando en su boda', 'BODAS · MOMENTOS QUE QUEDAN'],
-    ['https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=1100&q=85', 'Decoración cálida para una recepción', 'SOCIALES · DETALLES CON INTENCIÓN'],
-    ['https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=1100&q=85', 'Pareja disfrutando su celebración', 'BODAS · UNA HISTORIA PROPIA'],
+    ['https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=900&q=78', 'Novios celebrando en su boda', 'BODAS · MOMENTOS QUE QUEDAN'],
+    ['https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=900&q=78', 'Decoración cálida para una recepción', 'SOCIALES · DETALLES CON INTENCIÓN'],
+    ['https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=900&q=78', 'Pareja disfrutando su celebración', 'BODAS · UNA HISTORIA PROPIA'],
   ],
   corporate: [
-    ['https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=1100&q=85', 'Conferencia en escenario', 'CORPORATIVOS · IDEAS EN ESCENA'],
-    ['https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1100&q=85', 'Espacio preparado para evento de empresa', 'MARCAS · ESPACIOS QUE COMUNICAN'],
-    ['https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1100&q=85', 'Reunión profesional y presentación', 'CORPORATIVOS · CADA DETALLE CUENTA'],
+    ['https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=900&q=78', 'Conferencia en escenario', 'CORPORATIVOS · IDEAS EN ESCENA'],
+    ['https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=78', 'Espacio preparado para evento de empresa', 'MARCAS · ESPACIOS QUE COMUNICAN'],
+    ['https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=900&q=78', 'Reunión profesional y presentación', 'CORPORATIVOS · CADA DETALLE CUENTA'],
   ],
   live: [
-    ['https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1100&q=85', 'DJ y luces en una fiesta', 'FIESTAS · HASTA EL ÚLTIMO BEAT'],
-    ['https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=1100&q=85', 'Luces de escenario en concierto', 'CONCIERTOS · ENERGÍA EN VIVO'],
-    ['https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1100&q=85', 'Público disfrutando un concierto', 'EN VIVO · UNA NOCHE PARA RECORDAR'],
+    ['https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=900&q=78', 'DJ y luces en una fiesta', 'FIESTAS · HASTA EL ÚLTIMO BEAT'],
+    ['https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=900&q=78', 'Luces de escenario en concierto', 'CONCIERTOS · ENERGÍA EN VIVO'],
+    ['https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=900&q=78', 'Público disfrutando un concierto', 'EN VIVO · UNA NOCHE PARA RECORDAR'],
   ],
 };
 
@@ -115,14 +115,73 @@ revealTargets.forEach((target, index) => {
   observer.observe(target);
 });
 
-// Pause sample footage while it is off screen so the motion stays smooth on phones.
+// Load footage only when it is needed, and keep at most one reel playing per lane.
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const saveData = navigator.connection?.saveData || ['slow-2g', '2g'].includes(navigator.connection?.effectiveType);
+const reelVisibility = new Map();
+const reelVideos = [...document.querySelectorAll('.reel-card video')];
+
+function prepareVideo(video) {
+  if (video.dataset.poster && !video.poster) video.poster = video.dataset.poster;
+  const pendingSources = [...video.querySelectorAll('source[data-src]')];
+  if (!pendingSources.length) return;
+  pendingSources.forEach((source) => {
+    source.src = source.dataset.src;
+    delete source.dataset.src;
+  });
+  video.load();
+}
+
+function playVisibleVideo(video) {
+  if (reducedMotion || saveData) {
+    if (video.dataset.poster && !video.poster) video.poster = video.dataset.poster;
+    return;
+  }
+  prepareVideo(video);
+  if (video.paused) video.play().catch(() => {});
+}
+
+function updateReelPlayback() {
+  const bestByLane = new Map();
+  reelVisibility.forEach((ratio, video) => {
+    const lane = video.closest('.reel-lane');
+    if (lane && (!bestByLane.has(lane) || bestByLane.get(lane).ratio < ratio)) {
+      bestByLane.set(lane, { video, ratio });
+    }
+  });
+  reelVideos.forEach((video) => {
+    if (bestByLane.get(video.closest('.reel-lane'))?.video === video) playVisibleVideo(video);
+    else video.pause();
+  });
+}
+
 const videoObserver = new IntersectionObserver((entries) => {
   entries.forEach(({ target, isIntersecting, intersectionRatio }) => {
-    // Reels are loaded and played only when they are meaningfully visible.
-    const shouldPlay = isIntersecting && (target.closest('.reel-card') ? intersectionRatio >= 0.35 : true);
-    if (shouldPlay) target.play().catch(() => {});
-    else target.pause();
+    if (target.closest('.reel-card')) {
+      if (isIntersecting && intersectionRatio >= 0.35) reelVisibility.set(target, intersectionRatio);
+      else reelVisibility.delete(target);
+      return;
+    }
+    if (!isIntersecting) {
+      target.pause();
+      return;
+    }
+    if (target.classList.contains('hero-video') && !reducedMotion && !saveData) {
+      if (target.dataset.startScheduled) return;
+      target.dataset.startScheduled = 'true';
+      const startHeroVideo = () => {
+        target.dataset.startScheduled = '';
+        const bounds = target.getBoundingClientRect();
+        if (bounds.bottom <= 0 || bounds.top >= window.innerHeight) return;
+        playVisibleVideo(target);
+      };
+      if ('requestIdleCallback' in window) window.requestIdleCallback(startHeroVideo, { timeout: 1400 });
+      else window.setTimeout(startHeroVideo, 700);
+      return;
+    }
+    playVisibleVideo(target);
   });
+  updateReelPlayback();
 }, { threshold: [0, 0.35], rootMargin: '80px 0px' });
 
 document.querySelectorAll('video').forEach((video) => {
@@ -143,7 +202,7 @@ document.querySelectorAll('.reel-audio').forEach((button) => {
 
 const servicePreview = document.querySelector('.service-cursor-preview');
 const previewVideo = servicePreview?.querySelector('video');
-if (servicePreview && previewVideo && window.matchMedia('(hover: hover) and (pointer: fine)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+if (servicePreview && previewVideo && window.matchMedia('(hover: hover) and (pointer: fine)').matches && !reducedMotion && !saveData) {
   document.querySelectorAll('.service-row').forEach((row) => {
     row.addEventListener('mouseenter', () => {
       previewVideo.src = row.dataset.previewVideo;
@@ -153,10 +212,13 @@ if (servicePreview && previewVideo && window.matchMedia('(hover: hover) and (poi
       servicePreview.classList.add('is-visible');
     });
     row.addEventListener('mousemove', (event) => {
-      const left = Math.min(event.clientX, window.innerWidth - 260);
-      const top = Math.min(event.clientY, window.innerHeight - 360);
+      const previewRect = servicePreview.getBoundingClientRect();
+      const gap = 26;
+      const fitsRight = event.clientX + previewRect.width + gap <= window.innerWidth - 12;
+      const left = fitsRight ? event.clientX + gap : event.clientX - previewRect.width - gap;
+      const top = Math.max(16, Math.min(event.clientY - previewRect.height / 2, window.innerHeight - previewRect.height - 16));
       servicePreview.style.setProperty('--preview-x', `${Math.max(12, left)}px`);
-      servicePreview.style.setProperty('--preview-y', `${Math.max(12, top)}px`);
+      servicePreview.style.setProperty('--preview-y', `${top}px`);
     });
     row.addEventListener('mouseleave', () => {
       servicePreview.classList.remove('is-visible');
@@ -300,9 +362,11 @@ window.addEventListener('scroll', () => {
       const rect = featureSection.getBoundingClientRect();
       const travel = Math.max(1, rect.height - window.innerHeight);
       const progress = Math.max(0, Math.min(1, -rect.top / travel));
-      featureSection.style.setProperty('--feature-inset', `${38 * (1 - progress)}%`);
-      featureSection.style.setProperty('--feature-radius', `${28 * (1 - progress)}px`);
-      const copyProgress = Math.max(0, Math.min(1, (progress - .28) / .32));
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const focus = reducedMotion ? 1 : Math.max(0, 1 - Math.abs(progress - .5) * 2);
+      featureSection.style.setProperty('--feature-inset', `${20 * (1 - focus)}%`);
+      featureSection.style.setProperty('--feature-radius', `${28 * (1 - focus)}px`);
+      const copyProgress = .32 + focus * .68;
       featureSection.style.setProperty('--feature-copy-opacity', String(copyProgress));
       featureSection.style.setProperty('--feature-shade-opacity', String(.18 + copyProgress * .62));
     }

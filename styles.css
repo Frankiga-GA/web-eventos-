@@ -49,3 +49,18 @@ img,video{max-width:100%}.service-link,.nav a,.nav-cta,.faq-list summary,.detail
 .service-cursor-preview{transition:opacity .2s,transform .22s cubic-bezier(.2,.7,.2,1),left .08s linear,top .08s linear}
 .pack-card:before{z-index:3;pointer-events:none}
 @media(max-width:760px){.kinetic-word{font-size:.72em}.service-cursor-preview{display:none}}
+/* The scroll reveal should read as intentional from its first frame. */
+.feature-video{clip-path:inset(var(--feature-inset,20%) round var(--feature-radius,24px))}
+.feature-copy,.feature-caption{opacity:var(--feature-copy-opacity,.42)}
+.feature-shade{opacity:var(--feature-shade-opacity,.38)}
+/* Sculpted cinematic frame for the service hover preview. */
+.service-cursor-preview{width:clamp(150px,16vw,190px);aspect-ratio:3/4;border:1px solid rgba(226,190,148,.92);border-radius:48% 48% 12px 12px / 23% 23% 12px 12px;background:#171410;box-shadow:0 22px 70px #0009,0 0 34px #c9a77924;transform:rotate(-6deg) scale(.93)}
+.service-cursor-preview.is-visible{transform:rotate(-3deg) scale(1)}
+.service-cursor-preview video{position:absolute;inset:0;border-radius:inherit;}
+.service-cursor-preview:before{content:"";position:absolute;z-index:1;inset:9px;border:1px solid #f4e7d08c;border-radius:inherit;pointer-events:none}
+.service-cursor-preview:after{content:"";position:absolute;z-index:1;inset:50% 0 0;border-radius:0 0 11px 11px;background:linear-gradient(transparent,rgba(7,6,5,.72));pointer-events:none}
+.service-cursor-preview span{z-index:2;left:18px;bottom:18px;font-size:9px;letter-spacing:.16em}
+/* Let the feature video grow into focus, then recede as the section passes. */
+.feature{height:190vh}
+@media(max-width:760px){.feature{height:170vh}}
+@media(prefers-reduced-motion:reduce){.feature{height:100vh}}
